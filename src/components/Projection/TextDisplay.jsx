@@ -7,7 +7,7 @@ export default function TextDisplay({ content, label }) {
         <p className="text-white/50 font-medium" style={{ fontSize: '3.5vw' }}>{label}</p>
       )}
       {paragraphs.map((line, i) => (
-        <p key={i} className="text-white font-light leading-relaxed" style={{ fontSize: '8vw' }}>
+        <p key={i} className="font-bold text-white leading-relaxed" style={{ fontSize: '8vw' }}>
           {line}
         </p>
       ))}
