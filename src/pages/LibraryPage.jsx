@@ -6,6 +6,7 @@ import {
   searchHimnario,
   fetchHimnarioDetail,
   normalizeTitle,
+  isValidSearchTerm,
 } from '../utils/himnarioScraper';
 
 export default function LibraryPage() {
@@ -13,9 +14,10 @@ export default function LibraryPage() {
   const [editingId, setEditingId] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // inputValue: what's typed; search: what's actually committed (Enter or lupa)
+  // inputValue: what's typed; search: committed valid term (Enter or lupa)
   const [inputValue, setInputValue] = useState('');
   const [search, setSearch] = useState('');
+  const [searchHint, setSearchHint] = useState('');
 
   // Web search state
   const [webResults, setWebResults] = useState([]);
@@ -42,7 +44,7 @@ export default function LibraryPage() {
   useEffect(() => {
     setWebResults([]);
     setWebError(null);
-    if (search.trim().length < 2) {
+    if (!search) {
       setWebLoading(false);
       return;
     }
@@ -57,6 +59,17 @@ export default function LibraryPage() {
 
   function commitSearch() {
     const term = inputValue.trim();
+    if (term === '') {
+      // Clear everything
+      setSearch('');
+      setSearchHint('');
+      return;
+    }
+    if (!isValidSearchTerm(term)) {
+      setSearchHint('Ingresa una palabra real (mín. 4 letras con vocales). Ej: amor, dios, gracia.');
+      return;
+    }
+    setSearchHint('');
     setSearch(term);
   }
 
@@ -127,7 +140,7 @@ export default function LibraryPage() {
               className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 pr-10 text-white focus:outline-none focus:border-indigo-500"
               placeholder="Buscar por título o artista..."
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => { setInputValue(e.target.value); setSearchHint(''); }}
               onKeyDown={handleKeyDown}
             />
             <button
@@ -141,15 +154,18 @@ export default function LibraryPage() {
               </svg>
             </button>
           </div>
+          {searchHint && (
+            <p className="text-yellow-400 text-xs mt-1 mb-3">{searchHint}</p>
+          )}
 
           {/* Local DB results */}
           <SongList onEdit={handleEdit} refreshKey={refreshKey} search={search} />
 
-          {/* Web results — only shown when a search has been committed */}
-          {search.trim().length >= 2 && (
+          {/* Web results — only shown when a valid search has been committed */}
+          {search.length > 0 && (
             <div className="mt-8">
               <h2 className="text-lg font-semibold text-gray-300 mb-3 flex items-center gap-2">
-                En Himnario Kichwa
+                Online
                 {webLoading && (
                   <span className="text-xs text-gray-500 font-normal">
                     Buscando...

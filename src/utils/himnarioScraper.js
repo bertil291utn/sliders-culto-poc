@@ -1,6 +1,30 @@
 const PROXY = 'https://corsproxy.io/?url=';
 const BASE = 'https://himnario.kichwamusic.com';
 
+const VOWELS = /[aeiouáéíóúüñ]/g;
+
+/**
+ * Returns true if `term` looks like a real word (not gibberish).
+ * Rules (all must pass):
+ *  1. Trimmed length >= 4
+ *  2. Contains at least one vowel (Spanish/Kichwa set)
+ *  3. Vowel-to-non-space-char ratio >= 30 %
+ *  4. No run of 3+ identical consecutive characters (aaaa, ssss…)
+ */
+export function isValidSearchTerm(term) {
+  const s = term.trim().toLowerCase();
+  if (s.length < 4) return false;
+
+  const nonSpace = s.replace(/\s+/g, '');
+  const vowelCount = (nonSpace.match(VOWELS) || []).length;
+
+  if (vowelCount === 0) return false;
+  if (vowelCount / nonSpace.length < 0.30) return false;
+  if (/(.)\1{2,}/.test(s)) return false;
+
+  return true;
+}
+
 export function normalizeTitle(title) {
   return title
     .toLowerCase()
