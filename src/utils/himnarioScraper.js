@@ -13,6 +13,15 @@ const VOWELS = /[aeiouáéíóúüñ]/g;
  */
 export function isValidSearchTerm(term) {
   const s = term.trim().toLowerCase();
+  if (s.length === 0) return false;
+
+  // Pure numeric: "1", "123", "535" — valid as hymn numbers
+  if (/^\d+$/.test(s)) return true;
+
+  // Mixed digits + letters ("112hh", "123aaee") — never valid
+  if (/\d/.test(s)) return false;
+
+  // Word quality checks
   if (s.length < 4) return false;
 
   const nonSpace = s.replace(/\s+/g, '');
