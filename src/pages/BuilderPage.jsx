@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getCultos, createCulto, deleteCulto } from '../db/database';
+import { getCultos, createCulto, createSlot, deleteCulto } from '../db/database';
 import CultoBuilder from '../components/Builder/CultoBuilder';
+import { CULTO_TEMPLATES, SLIDE_TYPE_COLORS } from '../components/Builder/templates';
 
 export default function BuilderPage() {
   const [cultos, setCultos] = useState([]);
@@ -10,19 +11,25 @@ export default function BuilderPage() {
   });
   const [showNewForm, setShowNewForm] = useState(false);
   const [newName, setNewName] = useState('');
+  const [showTemplates, setShowTemplates] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setCultos(getCultos());
   }, [refreshKey]);
 
-  function handleCreate() {
+  function handleCreate(tplId = null) {
     if (!newName.trim()) return;
     const id = createCulto({ name: newName });
+    if (tplId) {
+      const tpl = CULTO_TEMPLATES.find((t) => t.id === tplId);
+      tpl.slides.forEach((slide) => createSlot({ culto_id: id, ...slide }));
+    }
     const list = getCultos();
     setCultos(list);
     setSelectedId(id);
     setShowNewForm(false);
+    setShowTemplates(false);
     setNewName('');
   }
 
@@ -79,35 +86,73 @@ export default function BuilderPage() {
           <h1 className="text-2xl font-bold">Constructor del culto</h1>
           <button
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium"
-            onClick={() => { setShowNewForm(true); setSelectedId(null); }}
+            onClick={() => { setShowNewForm(true); setShowTemplates(false); setSelectedId(null); }}
           >
             + Nuevo culto
           </button>
         </div>
 
         {showNewForm && (
-          <div className="bg-gray-700 rounded-xl p-4 mb-6 flex gap-3">
-            <input
-              className="flex-1 bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-              placeholder="Nombre del nuevo culto"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              autoFocus
-            />
-            <button
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium disabled:opacity-40"
-              onClick={handleCreate}
-              disabled={!newName.trim()}
-            >
-              Crear
-            </button>
-            <button
-              className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm"
-              onClick={() => setShowNewForm(false)}
-            >
-              Cancelar
-            </button>
+          <div className="bg-gray-700 rounded-xl p-4 mb-6 flex flex-col gap-3">
+            <div className="flex gap-3">
+              <input
+                className="flex-1 bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                placeholder="Nombre del nuevo culto"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                autoFocus
+              />
+              <button
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium disabled:opacity-40"
+                onClick={() => handleCreate()}
+                disabled={!newName.trim()}
+              >
+                Crear en blanco
+              </button>
+              <button
+                className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
+                  showTemplates
+                    ? 'bg-indigo-800 text-white'
+                    : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
+                }`}
+                onClick={() => setShowTemplates((v) => !v)}
+              >
+                Desde template {showTemplates ? '▲' : '▼'}
+              </button>
+              <button
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-sm"
+                onClick={() => { setShowNewForm(false); setShowTemplates(false); }}
+              >
+                Cancelar
+              </button>
+            </div>
+
+            {showTemplates && (
+              <div className="flex flex-col gap-2 pt-1">
+                {CULTO_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    className="w-full text-left bg-gray-600 hover:bg-gray-500 border border-gray-500 hover:border-indigo-400 rounded-lg px-4 py-3 transition-colors disabled:opacity-40"
+                    onClick={() => handleCreate(tpl.id)}
+                    disabled={!newName.trim()}
+                  >
+                    <p className="text-sm font-semibold text-white mb-1">{tpl.name}</p>
+                    <p className="text-xs text-gray-400 mb-2">{tpl.description}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {tpl.slides.map((s, i) => (
+                        <span
+                          key={i}
+                          className={`text-xs px-2 py-0.5 rounded-full text-white/90 ${SLIDE_TYPE_COLORS[s.type]}`}
+                        >
+                          {s.label}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

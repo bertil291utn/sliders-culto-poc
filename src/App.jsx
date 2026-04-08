@@ -15,7 +15,7 @@ function Nav() {
 
   return (
     <nav className="bg-gray-900 border-b border-gray-700 px-4 py-2 flex gap-2 items-center">
-      <span className="text-white font-bold mr-4">Culto PoC</span>
+      <span className="text-white font-bold mr-4">Culto (Beta 0.1)</span>
       <NavLink to="/library" className={linkClass}>Librería</NavLink>
       <NavLink to="/builder" className={linkClass}>Constructor</NavLink>
       <NavLink to="/operator" className={linkClass}>Operador</NavLink>
