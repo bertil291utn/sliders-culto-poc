@@ -18,7 +18,7 @@ function KaraokePreview({ lines, activeIdx }) {
   );
 }
 
-export default function SongEditor({ songId, onSaved, onCancel }) {
+export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [color, setColor] = useState(DEFAULT_COLOR);
@@ -35,8 +35,13 @@ export default function SongEditor({ songId, onSaved, onCancel }) {
         const lines = getSongLines(songId);
         setLinesText(lines.map((l) => l.text).join('\n'));
       }
+    } else if (initialData) {
+      setTitle(initialData.title);
+      setArtist(initialData.artist || '');
+      setLinesText(initialData.linesText || '');
+      setPreviewIdx(0);
     }
-  }, [songId]);
+  }, [songId, initialData]);
 
   const lines = linesText.split('\n');
 

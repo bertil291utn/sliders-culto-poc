@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSongs, deleteSong, getSongLines } from '../../db/database';
 
-export default function SongList({ onEdit, refreshKey }) {
-  const [search, setSearch] = useState('');
+export default function SongList({ onEdit, refreshKey, search }) {
   const [songs, setSongs] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [expandedLines, setExpandedLines] = useState([]);
@@ -29,13 +28,6 @@ export default function SongList({ onEdit, refreshKey }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <input
-        className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-        placeholder="Buscar por título o artista..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-
       {songs.length === 0 && (
         <p className="text-gray-500 text-center py-8">
           {search ? 'No se encontraron canciones.' : 'No hay canciones. Agrega una para comenzar.'}
