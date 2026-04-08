@@ -45,7 +45,9 @@ export async function searchHimnario(term) {
     const titleEl = article.querySelector('.post-title, h2, h3');
     const title = titleEl?.textContent?.trim();
     if (!a || !title) return [];
-    return [{ title, url: a.href }];
+    const entry = article.querySelector('.post-entry');
+    const preview = entry?.textContent?.trim() ?? '';
+    return [{ title, url: a.href, preview }];
   });
 }
 

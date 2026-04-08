@@ -196,7 +196,9 @@ export default function LibraryPage() {
                     >
                       <div className="min-w-0 flex-1">
                         <p className="font-medium truncate">{r.title}</p>
-                        <p className="text-xs text-gray-400">Himnario Kichwa</p>
+                        {r.preview && (
+                          <p className="text-xs text-gray-300 mt-1 line-clamp-2 whitespace-pre-line">{r.preview}</p>
+                        )}
                       </div>
                       {exists ? (
                         <span className="text-xs text-green-400 px-3 flex-shrink-0">
