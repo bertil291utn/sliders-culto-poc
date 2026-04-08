@@ -139,7 +139,7 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
         <button
           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium disabled:opacity-40"
           onClick={handleSave}
-          disabled={!title.trim()}
+          disabled={!title?.trim()}
         >
           {songId ? 'Guardar cambios' : 'Agregar canción'}
         </button>

@@ -100,7 +100,7 @@ export default function LibraryPage() {
     setImportError(null);
     try {
       const detail = await fetchHimnarioDetail(result.url);
-      setInitialData(detail);
+      setInitialData({title:result.title,artist:detail.artist,linesText:detail.linesText});
       setEditingId(null);
       setView('editor');
     } catch {
