@@ -9,7 +9,6 @@ import ImageDisplay from '../components/Projection/ImageDisplay';
 export default function ProjectionPage() {
   const [state, setState] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const imageUrlRef = useRef('');
 
   useBroadcastReceiver((msg) => {
@@ -19,7 +18,21 @@ export default function ProjectionPage() {
       ch.postMessage({ type: 'PROJECTION_CONNECTED' });
       ch.close();
     }
+    // REQUEST_FULLSCREEN is now delivered via postMessage with capability delegation
+    // (BroadcastChannel cannot transfer user activation). See effect below.
   });
+
+  // Receive REQUEST_FULLSCREEN with delegated user activation from the operator window.
+  useEffect(() => {
+    const onMessage = (e) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type !== 'REQUEST_FULLSCREEN') return;
+      if (document.fullscreenElement) return;
+      document.documentElement.requestFullscreen().catch(() => {});
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   // On mount: announce presence + request current state; announce disconnect on close
   useEffect(() => {
@@ -44,12 +57,21 @@ export default function ProjectionPage() {
     el.requestFullscreen().catch(() => {});
   }, []);
 
-  // Track fullscreen state to show / hide the click-to-activate hint
+  // Publish fullscreen state so the operator can show / hide the preview overlay
   useEffect(() => {
-    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener('fullscreenchange', onChange);
-    onChange();
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    const ch = new BroadcastChannel('culto-presentation');
+    const publish = () => {
+      ch.postMessage({
+        type: 'FULLSCREEN_STATE',
+        fullscreen: Boolean(document.fullscreenElement),
+      });
+    };
+    document.addEventListener('fullscreenchange', publish);
+    publish();
+    return () => {
+      document.removeEventListener('fullscreenchange', publish);
+      ch.close();
+    };
   }, []);
 
   // Fallback: any click / key press inside the projection window forces fullscreen.
@@ -96,7 +118,7 @@ export default function ProjectionPage() {
 
   return (
     <div
-      className="relative w-screen h-screen flex items-center justify-center"
+      className="w-screen h-screen flex items-center justify-center"
       style={{ backgroundColor: bgColor || '#1e1b4b' }}
     >
       {slide.type === 'song' && lines.length > 0 && (
@@ -110,11 +132,6 @@ export default function ProjectionPage() {
       )}
       {(slide.type === 'no_digital' || (slide.type === 'song' && lines.length === 0)) && (
         <TitleDisplay label={slide.label} />
-      )}
-      {!isFullscreen && (
-        <div className="absolute top-4 right-4 bg-black/70 text-white text-sm px-4 py-2 rounded-lg pointer-events-none">
-          Haz clic para pantalla completa
-        </div>
       )}
     </div>
   );

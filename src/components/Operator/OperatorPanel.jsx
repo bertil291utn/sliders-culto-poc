@@ -28,6 +28,7 @@ export default function OperatorPanel() {
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [projectionConnected, setProjectionConnected] = useState(false);
   const [projectionWinOpen, setProjectionWinOpen] = useState(false);
+  const [projectionFullscreen, setProjectionFullscreen] = useState(false);
   const [projectionBanner, setProjectionBanner] = useState(null);
   const [openingProjection, setOpeningProjection] = useState(false);
   const timerRef = useRef(null);
@@ -129,6 +130,7 @@ export default function OperatorPanel() {
     if (msg.type === 'PROJECTION_DISCONNECTED') {
       setProjectionConnected(false);
     }
+    if (msg.type === 'FULLSCREEN_STATE') setProjectionFullscreen(Boolean(msg.fullscreen));
   });
 
   // Detect projection popup closed without relying on ref during render (refs don't re-render)
@@ -138,6 +140,7 @@ export default function OperatorPanel() {
       if (!projectionWinRef.current || projectionWinRef.current.closed) {
         projectionWinRef.current = null;
         setProjectionWinOpen(false);
+        setProjectionFullscreen(false);
       }
     }, 500);
     return () => clearInterval(id);
@@ -225,8 +228,35 @@ export default function OperatorPanel() {
     }
     projectionWinRef.current = null;
     setProjectionWinOpen(false);
+    setProjectionFullscreen(false);
     setProjectionConnected(false);
     setProjectionBanner(null);
+  }
+
+  function requestProjectionFullscreen() {
+    const win = projectionWinRef.current;
+    if (!win || win.closed) return;
+    try {
+      win.focus();
+    } catch {
+      // ignored
+    }
+    // Capability Delegation: postMessage's *options* form (second argument) lets us
+    // transfer this click's transient activation so the projection window can call
+    // requestFullscreen() without its own gesture.
+    // Caveat: passing options as 3rd arg is silently ignored — that's `transfer`.
+    try {
+      win.postMessage(
+        { type: 'REQUEST_FULLSCREEN' },
+        { targetOrigin: window.location.origin, delegate: 'fullscreen' },
+      );
+    } catch {
+      try {
+        win.postMessage({ type: 'REQUEST_FULLSCREEN' }, window.location.origin);
+      } catch {
+        // ignored
+      }
+    }
   }
 
   async function handleStartProjection() {
@@ -288,7 +318,22 @@ export default function OperatorPanel() {
       <div className="flex-1 flex flex-col gap-4">
         {/* Current slide preview */}
         <div
-          className="rounded-xl flex flex-col items-center justify-center min-h-[200px] p-8 gap-4 text-center overflow-hidden"
+          role={projectionWinOpen && !projectionFullscreen ? 'button' : undefined}
+          tabIndex={projectionWinOpen && !projectionFullscreen ? 0 : undefined}
+          onClick={projectionWinOpen && !projectionFullscreen ? requestProjectionFullscreen : undefined}
+          onKeyDown={
+            projectionWinOpen && !projectionFullscreen
+              ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    requestProjectionFullscreen();
+                  }
+                }
+              : undefined
+          }
+          className={`relative rounded-xl flex flex-col items-center justify-center min-h-[200px] p-8 gap-4 text-center overflow-hidden ${
+            projectionWinOpen && !projectionFullscreen ? 'cursor-pointer ring-2 ring-white/30' : ''
+          }`}
           style={{ backgroundColor: bgColor }}
         >
           {!currentSlide ? (
@@ -310,6 +355,13 @@ export default function OperatorPanel() {
             </>
           ) : (
             <p className="text-white text-2xl font-bold">{currentSlide.label}</p>
+          )}
+          {projectionWinOpen && !projectionFullscreen && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl pointer-events-none">
+              <span className="text-white text-lg font-semibold tracking-wide px-4 text-center">
+                Clic para pantalla completa
+              </span>
+            </div>
           )}
         </div>
 

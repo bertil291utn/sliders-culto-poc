@@ -22,7 +22,7 @@ This is a **church worship presentation PoC** — 100% frontend, no backend. Thr
 
 ### Cross-window sync (`src/hooks/useBroadcast.js`)
 
-The operator page and projection page communicate via the **BroadcastChannel API** on channel `"culto-presentation"`. The operator sends a single `STATE` message type on every state change (slot index, line index, lines array, bg color, etc.). The projection page is purely reactive — it renders whatever the last `STATE` message contained.
+The operator page and projection page communicate via the **BroadcastChannel API** on channel `"culto-presentation"`. The operator sends a single `STATE` message type on every state change (slot index, line index, lines array, bg color, etc.). The projection page is purely reactive — it renders whatever the last `STATE` message contained. Additional message types: `REQUEST_FULLSCREEN` (operator → projection), `FULLSCREEN_STATE` (projection → operator, mirrors `document.fullscreenElement`).
 
 Presenter mode opens `/projection` via [`src/utils/screenManager.js`](src/utils/screenManager.js): Chromium's **Window Management API** caches `getScreenDetails()` (primed on operator mount via `primeScreenManagement`). With permission + two displays, `window.open` uses **projector bounds** (popup + `left`/`top`/`width`/`height`) and `moveTo`/`resizeTo` as backup; `fullscreen` is not set on `open` (Chrome may ignore coords). Window name: `culto-projection`. Production deploys need **HTTPS** for that API (localhost is fine for dev).
 
