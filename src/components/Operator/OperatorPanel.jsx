@@ -361,7 +361,7 @@ export default function OperatorPanel() {
           />
 
           <div className="flex items-center justify-center gap-2 ml-2">
-            <button
+           {(!projectionWinOpen)&&( <button
               type="button"
               className={`rounded-lg px-3 py-2 text-sm font-medium ${
                 projectionConnected && !projectionWinOpen
@@ -370,18 +370,18 @@ export default function OperatorPanel() {
               }`}
               disabled={openingProjection || (projectionConnected && !projectionWinOpen)}
               onClick={handleStartProjection}
-              title={
-                projectionWinOpen ? 'Traer la ventana de proyección al frente' : undefined
-              }
+              // title={
+              //   projectionWinOpen ? 'Traer la ventana de proyección al frente' : undefined
+              // }
             >
-              {openingProjection
+              {/* {openingProjection
                 ? 'Abriendo…'
-                : projectionWinOpen
-                  ? '✓ Proyección — enfocar'
+                // : projectionWinOpen
+                //   ? '✓ Proyección — enfocar'
                   : projectionConnected
-                    ? '✓ Proyección activa'
-                    : '▶ Iniciar proyección'}
-            </button>
+                    ? '✓ Proyección activa' */}
+                    ▶ Iniciar proyección
+            </button>)}
             {projectionWinOpen && (
               <button
                 type="button"
