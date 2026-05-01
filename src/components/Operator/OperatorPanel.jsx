@@ -353,6 +353,19 @@ export default function OperatorPanel() {
                 </p>
               )}
             </>
+          ) : currentSlide.type === 'reading' || currentSlide.type === 'message' ? (
+            <div className="flex flex-col items-center gap-3 w-full text-center">
+              {currentSlide.label && (
+                <p className="text-white/50 text-sm font-medium">{currentSlide.label}</p>
+              )}
+              {currentSlide.content ? (
+                currentSlide.content.split('\n').filter(Boolean).map((line, i) => (
+                  <p key={i} className="text-white text-xl font-bold leading-snug">{line}</p>
+                ))
+              ) : (
+                <p className="text-white/30 text-lg">Sin contenido</p>
+              )}
+            </div>
           ) : (
             <p className="text-white text-2xl font-bold">{currentSlide.label}</p>
           )}
