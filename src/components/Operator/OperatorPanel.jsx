@@ -4,7 +4,7 @@ import { useBroadcastSender, useBroadcastReceiver } from '../../hooks/useBroadca
 import { getImageUrl } from '../../db/imageStore';
 import SlideNav from './SlideNav';
 import TempoSlider from './TempoSlider';
-import { openProjectionWindow } from '../../utils/screenManager';
+import { openProjectionWindow, primeScreenManagement } from '../../utils/screenManager';
 
 const PROJECTION_BANNER_TEXT = {
   'fallback-single-screen':
@@ -34,6 +34,11 @@ export default function OperatorPanel() {
   const previewImageUrlRef = useRef('');
   const projectionWinRef = useRef(null);
   const send = useBroadcastSender();
+
+  // Warm up Window Management API + cache screens (permission prompt first visit)
+  useEffect(() => {
+    primeScreenManagement().catch(() => {});
+  }, []);
 
   // On mount: probe for an already-open projection tab
   useEffect(() => {
@@ -123,8 +128,6 @@ export default function OperatorPanel() {
     if (msg.type === 'PROJECTION_CONNECTED') setProjectionConnected(true);
     if (msg.type === 'PROJECTION_DISCONNECTED') {
       setProjectionConnected(false);
-      setProjectionWinOpen(false);
-      projectionWinRef.current = null;
     }
   });
 
@@ -210,6 +213,21 @@ export default function OperatorPanel() {
     const culto = cultos.find((c) => c.id === Number(cultoId));
     return culto?.background_color || '#1e1b4b';
   })();
+
+  function handleStopProjection() {
+    const win = projectionWinRef.current;
+    if (win && !win.closed) {
+      try {
+        win.close();
+      } catch {
+        // Some browsers refuse to close windows opened by other contexts; ignored.
+      }
+    }
+    projectionWinRef.current = null;
+    setProjectionWinOpen(false);
+    setProjectionConnected(false);
+    setProjectionBanner(null);
+  }
 
   async function handleStartProjection() {
     if (openingProjection) return;
@@ -342,9 +360,10 @@ export default function OperatorPanel() {
             disabled={!isSongSlide}
           />
 
+          <div className="flex items-center justify-center gap-2 ml-2">
             <button
               type="button"
-              className={`rounded-lg ml-2 px-3 py-2 text-sm font-medium ${
+              className={`rounded-lg px-3 py-2 text-sm font-medium ${
                 projectionConnected && !projectionWinOpen
                   ? 'bg-gray-600 opacity-60 cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-500'
@@ -363,6 +382,17 @@ export default function OperatorPanel() {
                     ? '✓ Proyección activa'
                     : '▶ Iniciar proyección'}
             </button>
+            {projectionWinOpen && (
+              <button
+                type="button"
+                className="rounded-lg px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500"
+                onClick={handleStopProjection}
+                title="Cerrar la ventana de proyección"
+              >
+                ■ Detener proyección
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
