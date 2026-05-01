@@ -27,6 +27,7 @@ export default function OperatorPanel() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [projectionConnected, setProjectionConnected] = useState(false);
+  const [projectionWinOpen, setProjectionWinOpen] = useState(false);
   const [projectionBanner, setProjectionBanner] = useState(null);
   const [openingProjection, setOpeningProjection] = useState(false);
   const timerRef = useRef(null);
@@ -120,8 +121,24 @@ export default function OperatorPanel() {
   useBroadcastReceiver((msg) => {
     if (msg.type === 'REQUEST_STATE') broadcast();
     if (msg.type === 'PROJECTION_CONNECTED') setProjectionConnected(true);
-    if (msg.type === 'PROJECTION_DISCONNECTED') setProjectionConnected(false);
+    if (msg.type === 'PROJECTION_DISCONNECTED') {
+      setProjectionConnected(false);
+      setProjectionWinOpen(false);
+      projectionWinRef.current = null;
+    }
   });
+
+  // Detect projection popup closed without relying on ref during render (refs don't re-render)
+  useEffect(() => {
+    if (!projectionWinOpen) return;
+    const id = setInterval(() => {
+      if (!projectionWinRef.current || projectionWinRef.current.closed) {
+        projectionWinRef.current = null;
+        setProjectionWinOpen(false);
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [projectionWinOpen]);
 
   // Auto-advance timer — only advances lines for 'song' slides
   useEffect(() => {
@@ -194,20 +211,18 @@ export default function OperatorPanel() {
     return culto?.background_color || '#1e1b4b';
   })();
 
-  const hasProjectionWindow =
-    projectionWinRef.current != null && projectionWinRef.current.closed === false;
-
   async function handleStartProjection() {
     if (openingProjection) return;
 
     if (projectionWinRef.current && !projectionWinRef.current.closed) {
       projectionWinRef.current.focus();
+      setProjectionWinOpen(true);
       setProjectionBanner(null);
       return;
     }
 
     // Projection tab exists but was opened elsewhere (e.g. refreshed operator page)
-    if (projectionConnected && !hasProjectionWindow) return;
+    if (projectionConnected && !projectionWinOpen) return;
 
     setOpeningProjection(true);
     try {
@@ -215,8 +230,10 @@ export default function OperatorPanel() {
       projectionWinRef.current = win;
       if (!win) {
         setProjectionBanner('blocked');
+        setProjectionWinOpen(false);
         return;
       }
+      setProjectionWinOpen(true);
       setProjectionBanner(mode === 'projector' ? null : mode);
     } finally {
       setOpeningProjection(false);
@@ -328,19 +345,19 @@ export default function OperatorPanel() {
             <button
               type="button"
               className={`rounded-lg ml-2 px-3 py-2 text-sm font-medium ${
-                projectionConnected && !hasProjectionWindow
+                projectionConnected && !projectionWinOpen
                   ? 'bg-gray-600 opacity-60 cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-500'
               }`}
-              disabled={openingProjection || (projectionConnected && !hasProjectionWindow)}
+              disabled={openingProjection || (projectionConnected && !projectionWinOpen)}
               onClick={handleStartProjection}
               title={
-                hasProjectionWindow ? 'Traer la ventana de proyección al frente' : undefined
+                projectionWinOpen ? 'Traer la ventana de proyección al frente' : undefined
               }
             >
               {openingProjection
                 ? 'Abriendo…'
-                : hasProjectionWindow
+                : projectionWinOpen
                   ? '✓ Proyección — enfocar'
                   : projectionConnected
                     ? '✓ Proyección activa'
