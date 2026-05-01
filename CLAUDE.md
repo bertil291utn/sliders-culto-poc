@@ -24,7 +24,7 @@ This is a **church worship presentation PoC** — 100% frontend, no backend. Thr
 
 The operator page and projection page communicate via the **BroadcastChannel API** on channel `"culto-presentation"`. The operator sends a single `STATE` message type on every state change (slot index, line index, lines array, bg color, etc.). The projection page is purely reactive — it renders whatever the last `STATE` message contained.
 
-To open the projection window: `window.open('/projection', 'culto-projection')` in `OperatorPanel.jsx`.
+Presenter mode opens `/projection` via [`src/utils/screenManager.js`](src/utils/screenManager.js): Chromium's **Window Management API** (`getScreenDetails`) places the popup on the secondary display when available; otherwise it falls back to a normal tab. Window name: `culto-projection`. Production deploys need **HTTPS** for that API (localhost is fine for dev).
 
 ### Routes
 

@@ -4,6 +4,17 @@ import { useBroadcastSender, useBroadcastReceiver } from '../../hooks/useBroadca
 import { getImageUrl } from '../../db/imageStore';
 import SlideNav from './SlideNav';
 import TempoSlider from './TempoSlider';
+import { openProjectionWindow } from '../../utils/screenManager';
+
+const PROJECTION_BANNER_TEXT = {
+  'fallback-single-screen':
+    'Solo se detectó una pantalla. Conecta el proyector para usar modo presentador. Abriendo en esta ventana para vista previa.',
+  'fallback-unsupported':
+    'Tu navegador no soporta apertura automática en el proyector. Arrastra la nueva pestaña al proyector.',
+  'fallback-denied':
+    'Permiso denegado. Habilita «Administrar ventanas» en la barra de direcciones para la apertura automática.',
+  blocked: 'No se pudo abrir la ventana. Permite ventanas emergentes para este sitio.',
+};
 
 export default function OperatorPanel() {
   const [cultos, setCultos] = useState([]);
@@ -16,8 +27,11 @@ export default function OperatorPanel() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [projectionConnected, setProjectionConnected] = useState(false);
+  const [projectionBanner, setProjectionBanner] = useState(null);
+  const [openingProjection, setOpeningProjection] = useState(false);
   const timerRef = useRef(null);
   const previewImageUrlRef = useRef('');
+  const projectionWinRef = useRef(null);
   const send = useBroadcastSender();
 
   // On mount: probe for an already-open projection tab
@@ -180,6 +194,35 @@ export default function OperatorPanel() {
     return culto?.background_color || '#1e1b4b';
   })();
 
+  const hasProjectionWindow =
+    projectionWinRef.current != null && projectionWinRef.current.closed === false;
+
+  async function handleStartProjection() {
+    if (openingProjection) return;
+
+    if (projectionWinRef.current && !projectionWinRef.current.closed) {
+      projectionWinRef.current.focus();
+      setProjectionBanner(null);
+      return;
+    }
+
+    // Projection tab exists but was opened elsewhere (e.g. refreshed operator page)
+    if (projectionConnected && !hasProjectionWindow) return;
+
+    setOpeningProjection(true);
+    try {
+      const { win, mode } = await openProjectionWindow('/projection');
+      projectionWinRef.current = win;
+      if (!win) {
+        setProjectionBanner('blocked');
+        return;
+      }
+      setProjectionBanner(mode === 'projector' ? null : mode);
+    } finally {
+      setOpeningProjection(false);
+    }
+  }
+
   return (
     <div className="flex gap-4 h-full">
       {/* Sidebar: slide list */}
@@ -237,6 +280,21 @@ export default function OperatorPanel() {
 
         {/* Transport controls */}
         <div className="bg-gray-900 rounded-xl p-4 flex flex-col gap-4">
+          {projectionBanner && (
+            <div
+              role="status"
+              className="rounded-lg bg-amber-900/80 border border-amber-700 text-amber-100 text-sm px-3 py-2 flex justify-between gap-3 items-start"
+            >
+              <span>{PROJECTION_BANNER_TEXT[projectionBanner] ?? projectionBanner}</span>
+              <button
+                type="button"
+                className="text-amber-200 hover:text-white shrink-0 underline text-xs"
+                onClick={() => setProjectionBanner(null)}
+              >
+                Cerrar
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-center gap-3">
             <button
               className="px-5 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium"
@@ -268,10 +326,25 @@ export default function OperatorPanel() {
           />
 
             <button
-              className={`rounded-lg ml-2 px-2 py-0.5 ${projectionConnected ? 'bg-gray-600 opacity-40 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
-              onClick={() => !projectionConnected && window.open('/projection', '_blank')}
+              type="button"
+              className={`rounded-lg ml-2 px-3 py-2 text-sm font-medium ${
+                projectionConnected && !hasProjectionWindow
+                  ? 'bg-gray-600 opacity-60 cursor-not-allowed'
+                  : 'bg-green-600 hover:bg-green-500'
+              }`}
+              disabled={openingProjection || (projectionConnected && !hasProjectionWindow)}
+              onClick={handleStartProjection}
+              title={
+                hasProjectionWindow ? 'Traer la ventana de proyección al frente' : undefined
+              }
             >
-              {projectionConnected ? '✓ Proyección activa' : '▶ Iniciar proyección'}
+              {openingProjection
+                ? 'Abriendo…'
+                : hasProjectionWindow
+                  ? '✓ Proyección — enfocar'
+                  : projectionConnected
+                    ? '✓ Proyección activa'
+                    : '▶ Iniciar proyección'}
             </button>
         </div>
       </div>

@@ -5,6 +5,7 @@ import KaraokeDisplay from '../components/Projection/KaraokeDisplay';
 import TextDisplay from '../components/Projection/TextDisplay';
 import TitleDisplay from '../components/Projection/TitleDisplay';
 import ImageDisplay from '../components/Projection/ImageDisplay';
+import { getFullscreenScreenOptions } from '../utils/screenManager';
 
 export default function ProjectionPage() {
   const [state, setState] = useState(null);
@@ -35,12 +36,29 @@ export default function ProjectionPage() {
     };
   }, []);
 
-  // Auto-fullscreen when opened
+  // Auto-fullscreen when opened (prefer secondary display when Window Management API is available)
   useEffect(() => {
     const el = document.documentElement;
-    if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => {});
-    }
+    if (!el.requestFullscreen) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const opts = await getFullscreenScreenOptions();
+        if (cancelled) return;
+        if (opts) {
+          await el.requestFullscreen(opts);
+        } else {
+          await el.requestFullscreen();
+        }
+      } catch {
+        if (!cancelled) el.requestFullscreen().catch(() => {});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load image blob URL from IndexedDB when slide type is image
