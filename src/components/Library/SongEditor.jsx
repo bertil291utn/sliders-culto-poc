@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSong, getSongLines, createSong, updateSong, setSongLines } from '../../db/database';
+import { cleanRepeatMarkers, organizeKaraokeLines } from '../../utils/lyricsFormat';
 
 const DEFAULT_COLOR = '#1e1b4b';
 
@@ -22,6 +23,8 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [color, setColor] = useState(DEFAULT_COLOR);
+  const [hymnNumber, setHymnNumber] = useState('');
+  const [hymnLanguage, setHymnLanguage] = useState('');
   const [linesText, setLinesText] = useState('');
   const [previewIdx, setPreviewIdx] = useState(0);
 
@@ -32,6 +35,8 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
         setTitle(song.title);
         setArtist(song.artist || '');
         setColor(song.suggested_color || DEFAULT_COLOR);
+        setHymnNumber(song.number != null && song.number !== '' ? String(song.number) : '');
+        setHymnLanguage(song.language || '');
         const lines = getSongLines(songId);
         setLinesText(lines.map((l) => l.text).join('\n'));
       }
@@ -39,6 +44,18 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
       setTitle(initialData.title);
       setArtist(initialData.artist || '');
       setLinesText(initialData.linesText || '');
+      setHymnNumber(
+        initialData.number != null && initialData.number !== '' ? String(initialData.number) : ''
+      );
+      setHymnLanguage(initialData.language || '');
+      setPreviewIdx(0);
+    } else {
+      setTitle('');
+      setArtist('');
+      setColor(DEFAULT_COLOR);
+      setHymnNumber('');
+      setHymnLanguage('');
+      setLinesText('');
       setPreviewIdx(0);
     }
   }, [songId, initialData]);
@@ -47,11 +64,15 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
 
   function handleSave() {
     if (!title.trim()) return;
+    const n = String(hymnNumber).trim();
+    const numVal = n === '' ? null : parseInt(n, 10);
+    const number = numVal != null && !Number.isNaN(numVal) ? numVal : null;
+    const language = hymnLanguage === '' ? null : hymnLanguage;
     if (songId) {
-      updateSong(songId, { title, artist, suggested_color: color });
+      updateSong(songId, { title, artist, suggested_color: color, number, language });
       setSongLines(songId, lines);
     } else {
-      const newId = createSong({ title, artist, suggested_color: color });
+      const newId = createSong({ title, artist, suggested_color: color, number, language });
       setSongLines(newId, lines);
     }
     onSaved();
@@ -80,6 +101,33 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Nº himnario</label>
+          <input
+            type="number"
+            min={1}
+            max={9999}
+            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+            value={hymnNumber}
+            onChange={(e) => setHymnNumber(e.target.value)}
+            placeholder="Ej. 406"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Idioma (himnario)</label>
+          <select
+            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+            value={hymnLanguage}
+            onChange={(e) => setHymnLanguage(e.target.value)}
+          >
+            <option value="">—</option>
+            <option value="es">Castellano (C)</option>
+            <option value="kichwa">Kichwa (K)</option>
+          </select>
+        </div>
+      </div>
+
       {/* <div>
         <label className="block text-sm text-gray-400 mb-1">Color de fondo sugerido</label>
         <div className="flex items-center gap-3">
@@ -94,9 +142,35 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
       </div> */}
 
       <div>
-        <label className="block text-sm text-gray-400 mb-1">
-          Letras <span className="text-gray-500">(una línea por fila)</span>
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <label className="block text-sm text-gray-400">
+            Letras <span className="text-gray-500">(una línea por fila)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="px-2 py-1 bg-teal-900/80 hover:bg-teal-800 border border-teal-700 rounded text-xs text-teal-100"
+              title="Quita // y duplica una vez el texto entre // ... //"
+              onClick={() => {
+                setLinesText(cleanRepeatMarkers(linesText));
+                setPreviewIdx(0);
+              }}
+            >
+              Limpiado de texto
+            </button>
+            <button
+              type="button"
+              className="px-2 py-1 bg-indigo-900/80 hover:bg-indigo-800 border border-indigo-700 rounded text-xs text-indigo-100"
+              title="Parte en líneas cortas (~3–4 palabras) para karaoke, según longitud y comas"
+              onClick={() => {
+                setLinesText(organizeKaraokeLines(linesText));
+                setPreviewIdx(0);
+              }}
+            >
+              Organización de párrafos
+            </button>
+          </div>
+        </div>
         <textarea
           className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 resize-none"
           rows={12}
@@ -107,6 +181,11 @@ export default function SongEditor({ songId, onSaved, onCancel, initialData }) {
           }}
           placeholder="Santo, santo, santo&#10;Es el Señor de luz&#10;Venimos a adorar..."
         />
+        <p className="text-xs text-gray-500 mt-1">
+          Usa primero <strong className="text-gray-400">Limpiado</strong> si el himnario trae bloques{' '}
+          <code className="text-gray-400">{'// … //'}</code>, luego{' '}
+          <strong className="text-gray-400">Organización</strong> para trocear (~3–4 palabras) y preparar el karaoke.
+        </p>
       </div>
 
       {lines.some((l) => l.trim()) && (

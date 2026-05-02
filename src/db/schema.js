@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS songs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
   artist TEXT,
-  suggested_color TEXT DEFAULT '#1e1b4b'
+  suggested_color TEXT DEFAULT '#1e1b4b',
+  number INTEGER,
+  language TEXT
 );
 
 CREATE TABLE IF NOT EXISTS song_lines (

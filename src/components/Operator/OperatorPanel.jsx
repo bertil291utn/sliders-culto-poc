@@ -599,7 +599,7 @@ export default function OperatorPanel() {
                 }}
               >
                 <span aria-hidden className="select-none">
-                  👆
+                  🛠️
                 </span>
               </button>
               {fabMenuOpen && cultoId && (

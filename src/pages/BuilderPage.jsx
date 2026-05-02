@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useLayoutEffect, useCallback } from 'react';
 import { getCultos, createCulto, createSlot, deleteCulto } from '../db/database';
 import CultoBuilder from '../components/Builder/CultoBuilder';
+import ImportCultoModal from '../components/Builder/ImportCultoModal';
 import { CULTO_TEMPLATES, SLIDE_TYPE_COLORS } from '../components/Builder/templates';
 import { peekBuilderIntent, clearBuilderIntent } from '../utils/navigationIntents';
 
@@ -13,6 +14,7 @@ export default function BuilderPage() {
   const [showNewForm, setShowNewForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingBuilderIntent, setPendingBuilderIntent] = useState(null);
 
@@ -46,6 +48,15 @@ export default function BuilderPage() {
     setShowNewForm(false);
     setShowTemplates(false);
     setNewName('');
+  }
+
+  function handleImportCreated(id) {
+    setSelectedId(id);
+    setShowNewForm(false);
+    setShowTemplates(false);
+    setNewName('');
+    setShowImportModal(false);
+    setRefreshKey((k) => k + 1);
   }
 
   function handleDelete(id) {
@@ -97,9 +108,17 @@ export default function BuilderPage() {
 
       {/* Main content — centrado */}
       <div className="flex-1 max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Constructor del culto</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <h1 className="text-2xl font-bold flex-1">Constructor del culto</h1>
           <button
+            type="button"
+            className="px-4 py-2 bg-teal-700 hover:bg-teal-600 rounded text-sm font-medium"
+            onClick={() => setShowImportModal(true)}
+          >
+            Importar desde texto
+          </button>
+          <button
+            type="button"
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium"
             onClick={() => { setShowNewForm(true); setShowTemplates(false); setSelectedId(null); }}
           >
@@ -118,6 +137,13 @@ export default function BuilderPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                 autoFocus
               />
+              <button
+                type="button"
+                className="px-4 py-2 bg-teal-700 hover:bg-teal-600 rounded text-sm font-medium"
+                onClick={() => setShowImportModal(true)}
+              >
+                Importar desde texto
+              </button>
               <button
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium disabled:opacity-40"
                 onClick={() => handleCreate()}
@@ -186,6 +212,13 @@ export default function BuilderPage() {
           />
         )}
       </div>
+
+      {showImportModal && (
+        <ImportCultoModal
+          onClose={() => setShowImportModal(false)}
+          onCreated={handleImportCreated}
+        />
+      )}
     </div>
   );
 }

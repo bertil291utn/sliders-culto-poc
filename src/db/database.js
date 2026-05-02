@@ -1,5 +1,6 @@
 import initSqlJs from 'sql.js';
 import { SCHEMA } from './schema';
+import { normalizeTitle } from '../utils/himnarioScraper';
 
 const STORAGE_KEY = 'culto_db';
 
@@ -50,6 +51,23 @@ export async function initDB() {
     }
   } catch (e) {}
 
+  // Migration: songs.number and songs.language for himnario matching
+  try {
+    const ti = db.exec('PRAGMA table_info(songs)');
+    if (ti.length && ti[0].values?.length) {
+      const nameIdx = ti[0].columns.indexOf('name');
+      const names = new Set(ti[0].values.map((row) => row[nameIdx]));
+      if (!names.has('number')) {
+        db.run('ALTER TABLE songs ADD COLUMN number INTEGER');
+        saveToStorage();
+      }
+      if (!names.has('language')) {
+        db.run('ALTER TABLE songs ADD COLUMN language TEXT');
+        saveToStorage();
+      }
+    }
+  } catch (e) {}
+
   db.run(SCHEMA);
   return db;
 }
@@ -91,18 +109,65 @@ export function getSong(id) {
   return query(`SELECT * FROM songs WHERE id = ?`, [id])[0] || null;
 }
 
-export function createSong({ title, artist = '', suggested_color = '#1e1b4b' }) {
-  return runInsert(`INSERT INTO songs (title, artist, suggested_color) VALUES (?, ?, ?)`, [
-    title,
-    artist,
-    suggested_color,
-  ]);
+/** Match by himnario number; if language is set, prefer rows with same language. */
+export function getSongByNumber(number, language = null) {
+  if (number == null || Number.isNaN(Number(number))) return null;
+  const n = Number(number);
+  if (language) {
+    const exact = query(
+      `SELECT * FROM songs WHERE number = ? AND language = ? LIMIT 1`,
+      [n, language]
+    );
+    if (exact[0]) return exact[0];
+    const loose = query(
+      `SELECT * FROM songs WHERE number = ? AND (language IS NULL OR language = ?) ORDER BY CASE WHEN language = ? THEN 0 ELSE 1 END LIMIT 1`,
+      [n, language, language]
+    );
+    return loose[0] || null;
+  }
+  return query(`SELECT * FROM songs WHERE number = ? LIMIT 1`, [n])[0] || null;
 }
 
-export function updateSong(id, { title, artist, suggested_color }) {
+export function getSongByTitleFuzzy(title) {
+  const t = (title || '').trim();
+  if (!t) return null;
+  const n = normalizeTitle(t);
+  if (!n) return null;
+  const songs = query(`SELECT * FROM songs`);
+  for (const s of songs) {
+    if (normalizeTitle(s.title) === n) return s;
+  }
+  for (const s of songs) {
+    const sn = normalizeTitle(s.title);
+    if (sn.includes(n) || n.includes(sn)) return s;
+  }
+  return null;
+}
+
+export function createSong({
+  title,
+  artist = '',
+  suggested_color = '#1e1b4b',
+  number = null,
+  language = null,
+}) {
+  return runInsert(
+    `INSERT INTO songs (title, artist, suggested_color, number, language) VALUES (?, ?, ?, ?, ?)`,
+    [title, artist, suggested_color, number ?? null, language ?? null]
+  );
+}
+
+export function updateSong(id, { title, artist, suggested_color, number, language }) {
   run(
-    `UPDATE songs SET title = ?, artist = ?, suggested_color = ? WHERE id = ?`,
-    [title, artist, suggested_color, id]
+    `UPDATE songs SET title = ?, artist = ?, suggested_color = ?, number = ?, language = ? WHERE id = ?`,
+    [
+      title,
+      artist,
+      suggested_color,
+      number ?? null,
+      language ?? null,
+      id,
+    ]
   );
 }
 
