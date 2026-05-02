@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { getSongs } from '../../db/database';
 import { saveImage, getImageUrl, deleteImage } from '../../db/imageStore';
+import SongCombobox from './SongCombobox';
 
 const SLIDE_TYPES = [
   { value: 'song', label: 'Canción karaoke', color: 'bg-teal-700' },
@@ -15,8 +15,6 @@ export default function SlideModal({ slide, onSave, onClose }) {
   const [label, setLabel] = useState(slide?.label || '');
   const [songId, setSongId] = useState(slide?.song_id || '');
   const [content, setContent] = useState(slide?.content || '');
-  const [songs, setSongs] = useState([]);
-  const [songSearch, setSongSearch] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
@@ -34,10 +32,6 @@ export default function SlideModal({ slide, onSave, onClose }) {
       if (imageFile && imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, []);
-
-  useEffect(() => {
-    setSongs(getSongs(songSearch));
-  }, [songSearch]);
 
   function handleImageFile(e) {
     const file = e.target.files[0];
@@ -118,32 +112,14 @@ export default function SlideModal({ slide, onSave, onClose }) {
         </div>
 
         {type === 'song' && (
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Canción</label>
-            <input
-              className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 mb-2"
-              placeholder="Buscar canción..."
-              value={songSearch}
-              onChange={(e) => setSongSearch(e.target.value)}
-            />
-            <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
-              <button
-                className={`text-left px-3 py-2 rounded text-sm ${!songId ? 'bg-indigo-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                onClick={() => setSongId('')}
-              >
-                (Sin asignar)
-              </button>
-              {songs.map((s) => (
-                <button
-                  key={s.id}
-                  className={`text-left px-3 py-2 rounded text-sm ${songId === s.id ? 'bg-indigo-700 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                  onClick={() => setSongId(s.id)}
-                >
-                  {s.title}{s.artist ? ` — ${s.artist}` : ''}
-                </button>
-              ))}
-            </div>
-          </div>
+          <SongCombobox
+            songId={songId ? Number(songId) : null}
+            label=""
+            labelText="Canción"
+            onCommit={({ song_id }) => {
+              setSongId(song_id == null ? '' : song_id);
+            }}
+          />
         )}
 
         {(type === 'reading' || type === 'message') && (

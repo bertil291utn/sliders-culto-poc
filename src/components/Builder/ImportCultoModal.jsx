@@ -21,6 +21,7 @@ import {
 } from '../../utils/cultoImporter';
 import { createCulto, createSlot } from '../../db/database';
 import { SLIDE_TYPE_COLORS } from './templates';
+import SongCombobox from './SongCombobox';
 
 const SLOT_TYPES = [
   { value: 'song', label: 'Alabanza' },
@@ -104,15 +105,27 @@ function SortableImportRow({ row, badge, color, onPatch, onRemove }) {
             ))}
           </select>
           <span className={`text-xs px-2 py-0.5 rounded ${badge.className}`}>{badge.text}</span>
-          {row.type === 'song' && row.song_id && (
-            <span className="text-xs text-gray-500">canción #{row.song_id}</span>
-          )}
         </div>
-        <input
-          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
-          value={row.label}
-          onChange={(e) => onPatch(row.localId, { label: e.target.value })}
-        />
+        {row.type === 'song' ? (
+          <SongCombobox
+            songId={row.song_id != null ? Number(row.song_id) : null}
+            label={row.label || ''}
+            labelText="Alabanza / librería"
+            inputClassName="py-1.5"
+            onCommit={({ song_id, label: nextLabel }) => {
+              onPatch(row.localId, {
+                song_id: song_id == null ? null : song_id,
+                label: nextLabel,
+              });
+            }}
+          />
+        ) : (
+          <input
+            className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
+            value={row.label}
+            onChange={(e) => onPatch(row.localId, { label: e.target.value })}
+          />
+        )}
       </div>
       <div className="flex gap-1 flex-shrink-0 self-end sm:self-center">
         <button
