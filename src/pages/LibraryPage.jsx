@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import SongList from '../components/Library/SongList';
 import SongEditor from '../components/Library/SongEditor';
 import { getSongs } from '../db/database';
@@ -8,6 +8,7 @@ import {
   normalizeTitle,
   isValidSearchTerm,
 } from '../utils/himnarioScraper';
+import { peekLibraryIntent, clearLibraryIntent } from '../utils/navigationIntents';
 
 export default function LibraryPage() {
   const [view, setView] = useState('list'); // 'list' | 'editor'
@@ -33,6 +34,15 @@ export default function LibraryPage() {
 
   // Pre-populated data for web imports
   const [initialData, setInitialData] = useState(null);
+
+  useLayoutEffect(() => {
+    const intent = peekLibraryIntent();
+    if (!intent) return;
+    clearLibraryIntent();
+    setEditingId(intent.songId);
+    setInitialData(null);
+    setView('editor');
+  }, []);
 
   // Sync local titles whenever the library changes
   useEffect(() => {

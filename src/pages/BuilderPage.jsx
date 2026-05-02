@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useLayoutEffect, useCallback } from 'react';
 import { getCultos, createCulto, createSlot, deleteCulto } from '../db/database';
 import CultoBuilder from '../components/Builder/CultoBuilder';
 import { CULTO_TEMPLATES, SLIDE_TYPE_COLORS } from '../components/Builder/templates';
+import { peekBuilderIntent, clearBuilderIntent } from '../utils/navigationIntents';
 
 export default function BuilderPage() {
   const [cultos, setCultos] = useState([]);
@@ -13,6 +14,20 @@ export default function BuilderPage() {
   const [newName, setNewName] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pendingBuilderIntent, setPendingBuilderIntent] = useState(null);
+
+  const handlePendingIntentConsumed = useCallback(() => {
+    setPendingBuilderIntent(null);
+  }, []);
+
+  useLayoutEffect(() => {
+    const intent = peekBuilderIntent();
+    if (!intent) return;
+    clearBuilderIntent();
+    setSelectedId(intent.cultoId);
+    setShowNewForm(false);
+    setPendingBuilderIntent(intent);
+  }, []);
 
   useEffect(() => {
     setCultos(getCultos());
@@ -166,6 +181,8 @@ export default function BuilderPage() {
           <CultoBuilder
             culto={selectedCulto}
             onChange={() => setRefreshKey((k) => k + 1)}
+            pendingIntent={pendingBuilderIntent}
+            onPendingIntentConsumed={handlePendingIntentConsumed}
           />
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -23,14 +23,20 @@ import { deleteImage } from '../../db/imageStore';
 import SortableSlide from './SortableSlide';
 import SlideModal from './SlideModal';
 
-export default function CultoBuilder({ culto, onChange }) {
+export default function CultoBuilder({ culto, onChange, pendingIntent, onPendingIntentConsumed }) {
   const [slides, setSlides] = useState([]);
   const [modal, setModal] = useState(null); // null | { slide: null } | { slide: slideObj }
   const [name, setName] = useState(culto.name);
   const [date, setDate] = useState(culto.date || '');
   const [color, setColor] = useState(culto.background_color || '#1e1b4b');
+  const headerRef = useRef(null);
+  const colorInputRef = useRef(null);
 
   const sensors = useSensors(useSensor(PointerSensor));
+
+  const consumePending = useCallback(() => {
+    onPendingIntentConsumed?.();
+  }, [onPendingIntentConsumed]);
 
   useEffect(() => {
     setSlides(getSlots(culto.id));
@@ -38,6 +44,64 @@ export default function CultoBuilder({ culto, onChange }) {
     setDate(culto.date || '');
     setColor(culto.background_color || '#1e1b4b');
   }, [culto.id]);
+
+  useEffect(() => {
+    if (!pendingIntent || pendingIntent.cultoId !== culto.id) return;
+
+    if (pendingIntent.action === 'editSlide') {
+      const sid = pendingIntent.slideId;
+      if (sid == null || !Number.isFinite(Number(sid))) {
+        consumePending();
+        return;
+      }
+      const slotsNow = getSlots(culto.id);
+      const found = slotsNow.find((s) => s.id === Number(sid));
+      if (found) setModal({ slide: found });
+      consumePending();
+      return;
+    }
+
+    if (pendingIntent.action === 'addSlide') {
+      setModal({ slide: null });
+      consumePending();
+      return;
+    }
+
+    if (pendingIntent.action === 'editBgColor') {
+      let cancelled = false;
+      let timeoutId = null;
+      const rafId = requestAnimationFrame(() => {
+        if (cancelled) return;
+        headerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        timeoutId = window.setTimeout(() => {
+          if (cancelled) return;
+          const el = colorInputRef.current;
+          if (el) {
+            try {
+              el.focus();
+              if (typeof el.showPicker === 'function') {
+                el.showPicker();
+              } else {
+                el.click();
+              }
+            } catch {
+              try {
+                el.click();
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+          consumePending();
+        }, 450);
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(rafId);
+        if (timeoutId != null) window.clearTimeout(timeoutId);
+      };
+    }
+  }, [pendingIntent, culto.id, consumePending]);
 
   function saveHeader() {
     updateCulto(culto.id, { name, date, background_color: color });
@@ -82,7 +146,7 @@ export default function CultoBuilder({ culto, onChange }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Header del culto */}
-      <div className="bg-gray-700 rounded-xl p-4 flex flex-col gap-3">
+      <div ref={headerRef} className="bg-gray-700 rounded-xl p-4 flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm text-gray-400 mb-1">Nombre del culto</label>
@@ -106,6 +170,7 @@ export default function CultoBuilder({ culto, onChange }) {
           <div className="flex items-center gap-3">
             <label className="text-sm text-gray-400">Color de fondo</label>
             <input
+              ref={colorInputRef}
               type="color"
               className="w-10 h-10 rounded cursor-pointer border-0 bg-transparent"
               value={color}

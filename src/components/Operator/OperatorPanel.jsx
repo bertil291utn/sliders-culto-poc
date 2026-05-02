@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getCultos, getSlots, getSongLines, reorderSlots } from '../../db/database';
 import { useBroadcastSender, useBroadcastReceiver } from '../../hooks/useBroadcast';
 import { getImageUrl } from '../../db/imageStore';
@@ -9,6 +10,7 @@ import {
   primeScreenManagement,
   attachExistingProjectionWindow,
 } from '../../utils/screenManager';
+import { writeBuilderIntent, writeLibraryIntent } from '../../utils/navigationIntents';
 
 const PROJECTION_POPUP_STORAGE_KEY = 'culto_operator_projection_popup';
 
@@ -73,6 +75,7 @@ const PROJECTION_BANNER_TEXT = {
 };
 
 export default function OperatorPanel() {
+  const navigate = useNavigate();
   const [cultos, setCultos] = useState([]);
   const [cultoId, setCultoId] = useState('');
   const [slides, setSlides] = useState([]);
@@ -95,12 +98,29 @@ export default function OperatorPanel() {
   const pendingLineIdxRestore = useRef(null);
   const prevSlideIdForLinesRef = useRef(null);
   const hasHydratedOperatorSessionRef = useRef(false);
+  const fabWrapRef = useRef(null);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const send = useBroadcastSender();
 
   // Warm up Window Management API + cache screens (permission prompt first visit)
   useEffect(() => {
     primeScreenManagement().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!fabMenuOpen) return;
+    function onDocMouseDown(e) {
+      const el = fabWrapRef.current;
+      if (el && !el.contains(e.target)) setFabMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [fabMenuOpen]);
+
+  // FAB y el overlay "Clic para pantalla completa" no deben mostrarse a la vez
+  useEffect(() => {
+    if (projectionWinOpen && !projectionFullscreen) setFabMenuOpen(false);
+  }, [projectionWinOpen, projectionFullscreen]);
 
   // After SPA navigation away and back: recover Window ref + sync UI with sessionStorage
   useLayoutEffect(() => {
@@ -411,6 +431,18 @@ export default function OperatorPanel() {
     }
   }
 
+  function goBuilder(intent) {
+    writeBuilderIntent(intent);
+    setFabMenuOpen(false);
+    navigate('/builder');
+  }
+
+  function goLibraryEditSong(songId) {
+    writeLibraryIntent({ action: 'editSong', songId });
+    setFabMenuOpen(false);
+    navigate('/library');
+  }
+
   async function handleStartProjection() {
     if (openingProjection) return;
 
@@ -500,7 +532,9 @@ export default function OperatorPanel() {
                 }
               : undefined
           }
-          className={`relative rounded-xl flex flex-col items-center justify-center min-h-[200px] p-8 gap-4 text-center overflow-hidden ${
+          className={`relative rounded-xl flex flex-col items-center justify-center min-h-[200px] p-8 gap-4 text-center ${
+            fabMenuOpen ? 'overflow-visible' : 'overflow-hidden'
+          } ${
             projectionWinOpen && !projectionFullscreen ? 'cursor-pointer ring-2 ring-white/30' : ''
           }`}
           style={{ backgroundColor: bgColor }}
@@ -539,10 +573,116 @@ export default function OperatorPanel() {
             <p className="text-white text-2xl font-bold">{currentSlide.label}</p>
           )}
           {projectionWinOpen && !projectionFullscreen && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl pointer-events-none z-10">
               <span className="text-white text-lg font-semibold tracking-wide px-4 text-center">
                 Clic para pantalla completa
               </span>
+            </div>
+          )}
+          {(!projectionWinOpen || projectionFullscreen) && (
+            <div
+              ref={fabWrapRef}
+              className="absolute bottom-3 right-3 z-[200] pointer-events-auto flex flex-col items-end gap-0"
+            >
+              <button
+                type="button"
+                aria-expanded={fabMenuOpen}
+                aria-haspopup="menu"
+                className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 shadow-lg border-2 border-white/20 flex items-center justify-center text-xl focus:outline-none focus:ring-2 focus:ring-white/50"
+                title="Opciones rápidas"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFabMenuOpen((o) => !o);
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                }}
+              >
+                <span aria-hidden className="select-none">
+                  👆
+                </span>
+              </button>
+              {fabMenuOpen && cultoId && (
+                <div
+                  role="menu"
+                  className="absolute bottom-full right-0 mb-2 min-w-[220px] max-h-[min(70vh,22rem)] overflow-y-auto rounded-lg border border-gray-600 bg-gray-900 shadow-2xl py-1 text-sm text-left z-[201]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                    {currentSlide?.type === 'song' ? (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!currentSlide?.song_id}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-700 disabled:opacity-40 disabled:pointer-events-none"
+                          onClick={() => {
+                            if (currentSlide?.song_id) {
+                              goLibraryEditSong(Number(currentSlide.song_id));
+                            }
+                          }}
+                        >
+                          Editar letras de la canción
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={!currentSlide}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-700 disabled:opacity-40"
+                          onClick={() => {
+                            if (currentSlide) {
+                              goBuilder({
+                                action: 'editSlide',
+                                cultoId: Number(cultoId),
+                                slideId: currentSlide.id,
+                              });
+                            }
+                          }}
+                        >
+                          Cambiar otra alabanza
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={!currentSlide}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-700 disabled:opacity-40"
+                        onClick={() => {
+                          if (currentSlide) {
+                            goBuilder({
+                              action: 'editSlide',
+                              cultoId: Number(cultoId),
+                              slideId: currentSlide.id,
+                            });
+                          }
+                        }}
+                      >
+                        Editar este slide
+                      </button>
+                    )}
+                    <div className="my-1 border-t border-gray-600" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-700"
+                      onClick={() =>
+                        goBuilder({ action: 'addSlide', cultoId: Number(cultoId) })
+                      }
+                    >
+                      Añadir nuevo slide
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-700"
+                      onClick={() =>
+                        goBuilder({ action: 'editBgColor', cultoId: Number(cultoId) })
+                      }
+                    >
+                      Cambiar color de fondo
+                    </button>
+                  </div>
+                )}
             </div>
           )}
         </div>
