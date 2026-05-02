@@ -1,10 +1,66 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { getCultos, getSlots, getSongLines, reorderSlots } from '../../db/database';
 import { useBroadcastSender, useBroadcastReceiver } from '../../hooks/useBroadcast';
 import { getImageUrl } from '../../db/imageStore';
 import SlideNav from './SlideNav';
 import TempoSlider from './TempoSlider';
-import { openProjectionWindow, primeScreenManagement } from '../../utils/screenManager';
+import {
+  openProjectionWindow,
+  primeScreenManagement,
+  attachExistingProjectionWindow,
+} from '../../utils/screenManager';
+
+const PROJECTION_POPUP_STORAGE_KEY = 'culto_operator_projection_popup';
+
+function readProjectionPopupStored() {
+  try {
+    return sessionStorage.getItem(PROJECTION_POPUP_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeProjectionPopupStored(on) {
+  try {
+    if (on) sessionStorage.setItem(PROJECTION_POPUP_STORAGE_KEY, '1');
+    else sessionStorage.removeItem(PROJECTION_POPUP_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+const OPERATOR_SESSION_KEY = 'culto_operator_session';
+
+function readOperatorSession() {
+  try {
+    const raw = sessionStorage.getItem(OPERATOR_SESSION_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return o && typeof o === 'object' ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOperatorSession(payload) {
+  try {
+    sessionStorage.setItem(OPERATOR_SESSION_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+function initialOperatorSessionValues() {
+  const snap = readOperatorSession();
+  return {
+    tempo:
+      typeof snap?.tempo === 'number' && snap.tempo >= 1 && snap.tempo <= 30
+        ? snap.tempo
+        : 3,
+    isPlaying: typeof snap?.isPlaying === 'boolean' ? snap.isPlaying : false,
+    projectionFullscreen: Boolean(snap?.projectionFullscreen),
+  };
+}
 
 const PROJECTION_BANNER_TEXT = {
   'fallback-single-screen':
@@ -23,23 +79,52 @@ export default function OperatorPanel() {
   const [slideIdx, setSlideIdx] = useState(0);
   const [lineIdx, setLineIdx] = useState(0);
   const [lines, setLines] = useState([]);
-  const [tempo, setTempo] = useState(3);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [tempo, setTempo] = useState(() => initialOperatorSessionValues().tempo);
+  const [isPlaying, setIsPlaying] = useState(() => initialOperatorSessionValues().isPlaying);
   const [previewImageUrl, setPreviewImageUrl] = useState('');
   const [projectionConnected, setProjectionConnected] = useState(false);
-  const [projectionWinOpen, setProjectionWinOpen] = useState(false);
-  const [projectionFullscreen, setProjectionFullscreen] = useState(false);
+  const [projectionWinOpen, setProjectionWinOpen] = useState(readProjectionPopupStored);
+  const [projectionFullscreen, setProjectionFullscreen] = useState(
+    () => initialOperatorSessionValues().projectionFullscreen,
+  );
   const [projectionBanner, setProjectionBanner] = useState(null);
   const [openingProjection, setOpeningProjection] = useState(false);
   const timerRef = useRef(null);
   const previewImageUrlRef = useRef('');
   const projectionWinRef = useRef(null);
+  const pendingLineIdxRestore = useRef(null);
+  const prevSlideIdForLinesRef = useRef(null);
+  const hasHydratedOperatorSessionRef = useRef(false);
   const send = useBroadcastSender();
 
   // Warm up Window Management API + cache screens (permission prompt first visit)
   useEffect(() => {
     primeScreenManagement().catch(() => {});
   }, []);
+
+  // After SPA navigation away and back: recover Window ref + sync UI with sessionStorage
+  useLayoutEffect(() => {
+    if (!readProjectionPopupStored()) return;
+    const w = attachExistingProjectionWindow();
+    if (w) {
+      projectionWinRef.current = w;
+      setProjectionWinOpen(true);
+      return;
+    }
+    writeProjectionPopupStored(false);
+    setProjectionWinOpen(false);
+  }, []);
+
+  // Projection tab already open (e.g. other route had no storage): reattach named popup
+  useLayoutEffect(() => {
+    if (!projectionConnected) return;
+    if (projectionWinRef.current && !projectionWinRef.current.closed) return;
+    const w = attachExistingProjectionWindow();
+    if (!w) return;
+    projectionWinRef.current = w;
+    setProjectionWinOpen(true);
+    writeProjectionPopupStored(true);
+  }, [projectionConnected]);
 
   // On mount: probe for an already-open projection tab
   useEffect(() => {
@@ -66,32 +151,83 @@ export default function OperatorPanel() {
     if (cultoId) localStorage.setItem('operator_cultoId', String(cultoId));
   }, [cultoId]);
 
-  // Load slides when culto changes
+  // Load slides when culto changes — restore slide / line / transport from session when same culto
   useEffect(() => {
     if (!cultoId) return;
+    prevSlideIdForLinesRef.current = null;
     const s = getSlots(cultoId);
     setSlides(s);
-    setSlideIdx(0);
-    setLineIdx(0);
+    const snap = readOperatorSession();
+    if (
+      snap &&
+      String(snap.cultoId) === String(cultoId) &&
+      typeof snap.slideIdx === 'number' &&
+      s.length > 0
+    ) {
+      const si = Math.max(0, Math.min(Math.floor(snap.slideIdx), s.length - 1));
+      setSlideIdx(si);
+      if (typeof snap.lineIdx === 'number') {
+        pendingLineIdxRestore.current = Math.max(0, Math.floor(snap.lineIdx));
+      } else {
+        pendingLineIdxRestore.current = null;
+      }
+      if (typeof snap.tempo === 'number' && snap.tempo >= 1 && snap.tempo <= 30) {
+        setTempo(snap.tempo);
+      }
+      if (typeof snap.isPlaying === 'boolean') {
+        setIsPlaying(snap.isPlaying);
+      }
+      if (typeof snap.projectionFullscreen === 'boolean') {
+        setProjectionFullscreen(snap.projectionFullscreen);
+      }
+    } else {
+      setSlideIdx(0);
+      pendingLineIdxRestore.current = null;
+      setTempo(3);
+      setIsPlaying(false);
+    }
+    hasHydratedOperatorSessionRef.current = true;
   }, [cultoId]);
 
-  // Load lines for current slide (only song slides have line-by-line content)
+  // Load lines for current slide; reset line only when the slide identity changes (not on session restore)
   useEffect(() => {
     const slide = slides[slideIdx];
-    if (!slide) { setLines([]); return; }
-    if (slide.type === 'song' && slide.song_id) {
-      setLines(getSongLines(slide.song_id).map((l) => l.text));
-    } else {
+    if (!slide) {
       setLines([]);
+      prevSlideIdForLinesRef.current = null;
+      return;
     }
-    setLineIdx(0);
 
-    // Load image preview URL for image slides
+    const slideId = slide.id;
+    const hadPrevious = prevSlideIdForLinesRef.current !== null;
+    const slideChangedByUser = hadPrevious && prevSlideIdForLinesRef.current !== slideId;
+
     if (previewImageUrlRef.current) {
       URL.revokeObjectURL(previewImageUrlRef.current);
       previewImageUrlRef.current = '';
       setPreviewImageUrl('');
     }
+
+    if (slide.type === 'song' && slide.song_id) {
+      const newLines = getSongLines(slide.song_id).map((l) => l.text);
+      setLines(newLines);
+      if (pendingLineIdxRestore.current !== null) {
+        const maxL = Math.max(0, newLines.length - 1);
+        setLineIdx(Math.min(pendingLineIdxRestore.current, maxL));
+        pendingLineIdxRestore.current = null;
+      } else if (slideChangedByUser) {
+        setLineIdx(0);
+      } else {
+        setLineIdx((i) => Math.min(i, Math.max(0, newLines.length - 1)));
+      }
+    } else {
+      setLines([]);
+      pendingLineIdxRestore.current = null;
+      if (slideChangedByUser) setLineIdx(0);
+    }
+
+    prevSlideIdForLinesRef.current = slideId;
+
     if (slide.type === 'image' && slide.content) {
       getImageUrl(slide.content).then((url) => {
         if (url) {
@@ -129,9 +265,23 @@ export default function OperatorPanel() {
     if (msg.type === 'PROJECTION_CONNECTED') setProjectionConnected(true);
     if (msg.type === 'PROJECTION_DISCONNECTED') {
       setProjectionConnected(false);
+      writeProjectionPopupStored(false);
     }
     if (msg.type === 'FULLSCREEN_STATE') setProjectionFullscreen(Boolean(msg.fullscreen));
   });
+
+  // Persist operator presentation UI across SPA routes (same tab)
+  useEffect(() => {
+    if (!hasHydratedOperatorSessionRef.current || !cultoId) return;
+    writeOperatorSession({
+      cultoId: String(cultoId),
+      slideIdx,
+      lineIdx,
+      tempo,
+      isPlaying,
+      projectionFullscreen,
+    });
+  }, [cultoId, slideIdx, lineIdx, tempo, isPlaying, projectionFullscreen]);
 
   // Detect projection popup closed without relying on ref during render (refs don't re-render)
   useEffect(() => {
@@ -141,6 +291,7 @@ export default function OperatorPanel() {
         projectionWinRef.current = null;
         setProjectionWinOpen(false);
         setProjectionFullscreen(false);
+        writeProjectionPopupStored(false);
       }
     }, 500);
     return () => clearInterval(id);
@@ -231,6 +382,7 @@ export default function OperatorPanel() {
     setProjectionFullscreen(false);
     setProjectionConnected(false);
     setProjectionBanner(null);
+    writeProjectionPopupStored(false);
   }
 
   function requestProjectionFullscreen() {
@@ -265,11 +417,26 @@ export default function OperatorPanel() {
     if (projectionWinRef.current && !projectionWinRef.current.closed) {
       projectionWinRef.current.focus();
       setProjectionWinOpen(true);
+      writeProjectionPopupStored(true);
       setProjectionBanner(null);
       return;
     }
 
-    // Projection tab exists but was opened elsewhere (e.g. refreshed operator page)
+    const attached = attachExistingProjectionWindow();
+    if (attached) {
+      projectionWinRef.current = attached;
+      setProjectionWinOpen(true);
+      writeProjectionPopupStored(true);
+      try {
+        attached.focus();
+      } catch {
+        /* ignore */
+      }
+      setProjectionBanner(null);
+      return;
+    }
+
+    // /projection is open without the named popup (e.g. manual tab) — do not open a second window
     if (projectionConnected && !projectionWinOpen) return;
 
     setOpeningProjection(true);
@@ -279,9 +446,11 @@ export default function OperatorPanel() {
       if (!win) {
         setProjectionBanner('blocked');
         setProjectionWinOpen(false);
+        writeProjectionPopupStored(false);
         return;
       }
       setProjectionWinOpen(true);
+      writeProjectionPopupStored(true);
       setProjectionBanner(mode === 'projector' ? null : mode);
     } finally {
       setOpeningProjection(false);

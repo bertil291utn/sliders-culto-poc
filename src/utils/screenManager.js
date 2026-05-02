@@ -136,3 +136,39 @@ export async function openProjectionWindow(url) {
 
   return { win, mode: 'projector' };
 }
+
+/**
+ * Reattach to an existing projection popup opened with {@link PROJECTION_WINDOW_NAME}.
+ * Uses `window.open('', name)` so the URL of an existing window is unchanged (HTML).
+ * Returns null if no such window exists, or if the target is not the projection route
+ * (e.g. a mistaken blank window is closed).
+ * @returns {Window | null}
+ */
+export function attachExistingProjectionWindow() {
+  try {
+    const w = window.open('', PROJECTION_WINDOW_NAME);
+    if (!w || w.closed) return null;
+    let path = '';
+    try {
+      path = new URL(w.location.href).pathname;
+    } catch {
+      try {
+        w.close();
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+    if (path.endsWith('/projection')) {
+      return w;
+    }
+    try {
+      w.close();
+    } catch {
+      /* ignore */
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

@@ -16,6 +16,10 @@ export default function ProjectionPage() {
     if (msg.type === 'REQUEST_PROJECTION_STATUS') {
       const ch = new BroadcastChannel('culto-presentation');
       ch.postMessage({ type: 'PROJECTION_CONNECTED' });
+      ch.postMessage({
+        type: 'FULLSCREEN_STATE',
+        fullscreen: Boolean(document.fullscreenElement),
+      });
       ch.close();
     }
     // REQUEST_FULLSCREEN is now delivered via postMessage with capability delegation
