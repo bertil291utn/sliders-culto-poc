@@ -1,4 +1,18 @@
 import { useState } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { parseCultoText, extractSuggestedCultoName } from '../../utils/cultoTextParser';
 import {
   resolveParsedItems,
@@ -33,6 +47,87 @@ function statusBadge(row) {
 }
 
 /**
+ * @param {{
+ *   row: { localId: string, type: string, label: string, song_id: number|null, source?: string, status?: string },
+ *   badge: { text: string, className: string },
+ *   color: string,
+ *   onPatch: (localId: string, patch: object) => void,
+ *   onRemove: (localId: string) => void,
+ * }} props
+ */
+function SortableImportRow({ row, badge, color, onPatch, onRemove }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.localId,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="flex flex-col sm:flex-row sm:items-stretch gap-2 bg-gray-900/60 border border-gray-600 rounded-lg p-3"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300 select-none flex-shrink-0 self-start sm:self-center px-1 py-2 sm:py-0"
+        title="Arrastrar para reordenar"
+      >
+        ⠿
+      </div>
+      <div
+        className={`w-full sm:w-2 min-h-[6px] sm:min-h-0 rounded flex-shrink-0 sm:self-stretch ${color}`}
+        aria-hidden
+      />
+      <div className="flex-1 min-w-0 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white"
+            value={row.type}
+            onChange={(e) => {
+              const t = e.target.value;
+              onPatch(row.localId, {
+                type: t,
+                song_id: t === 'song' ? row.song_id : null,
+              });
+            }}
+          >
+            {SLOT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          <span className={`text-xs px-2 py-0.5 rounded ${badge.className}`}>{badge.text}</span>
+          {row.type === 'song' && row.song_id && (
+            <span className="text-xs text-gray-500">canción #{row.song_id}</span>
+          )}
+        </div>
+        <input
+          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
+          value={row.label}
+          onChange={(e) => onPatch(row.localId, { label: e.target.value })}
+        />
+      </div>
+      <div className="flex gap-1 flex-shrink-0 self-end sm:self-center">
+        <button
+          type="button"
+          className="px-2 py-1 bg-red-900/60 hover:bg-red-800 rounded text-xs"
+          onClick={() => onRemove(row.localId)}
+        >
+          ×
+        </button>
+      </div>
+    </li>
+  );
+}
+
+/**
  * @param {{ onClose: () => void, onCreated: (cultoId: number) => void }} props
  */
 export default function ImportCultoModal({ onClose, onCreated }) {
@@ -44,6 +139,8 @@ export default function ImportCultoModal({ onClose, onCreated }) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [error, setError] = useState('');
+
+  const sensors = useSensors(useSensor(PointerSensor));
 
   async function handleProcess() {
     setError('');
@@ -93,13 +190,14 @@ export default function ImportCultoModal({ onClose, onCreated }) {
     setRows((prev) => mergeTypicalDominicalStructure(prev));
   }
 
-  function moveRow(index, delta) {
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
     setRows((prev) => {
-      const j = index + delta;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[j]] = [next[j], next[index]];
-      return next;
+      const oldIdx = prev.findIndex((r) => r.localId === active.id);
+      const newIdx = prev.findIndex((r) => r.localId === over.id);
+      if (oldIdx < 0 || newIdx < 0) return prev;
+      return arrayMove(prev, oldIdx, newIdx);
     });
   }
 
@@ -290,80 +388,22 @@ export default function ImportCultoModal({ onClose, onCreated }) {
                 </button>
               </div>
 
-              <ul className="flex flex-col gap-2">
-                {rows.map((row, index) => {
-                  const badge = statusBadge(row);
-                  const color = SLIDE_TYPE_COLORS[row.type] || 'bg-gray-600';
-                  return (
-                    <li
-                      key={row.localId}
-                      className="flex flex-col sm:flex-row sm:items-center gap-2 bg-gray-900/60 border border-gray-600 rounded-lg p-3"
-                    >
-                      <div
-                        className={`w-full sm:w-2 min-h-[6px] sm:min-h-[40px] rounded flex-shrink-0 ${color}`}
-                        aria-hidden
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={rows.map((r) => r.localId)} strategy={verticalListSortingStrategy}>
+                  <ul className="flex flex-col gap-2">
+                    {rows.map((row) => (
+                      <SortableImportRow
+                        key={row.localId}
+                        row={row}
+                        badge={statusBadge(row)}
+                        color={SLIDE_TYPE_COLORS[row.type] || 'bg-gray-600'}
+                        onPatch={patchRow}
+                        onRemove={removeRow}
                       />
-                      <div className="flex-1 min-w-0 flex flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <select
-                            className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white"
-                            value={row.type}
-                            onChange={(e) => {
-                              const t = e.target.value;
-                              patchRow(row.localId, {
-                                type: t,
-                                song_id: t === 'song' ? row.song_id : null,
-                              });
-                            }}
-                          >
-                            {SLOT_TYPES.map((t) => (
-                              <option key={t.value} value={t.value}>
-                                {t.label}
-                              </option>
-                            ))}
-                          </select>
-                          <span className={`text-xs px-2 py-0.5 rounded ${badge.className}`}>{badge.text}</span>
-                          {row.type === 'song' && row.song_id && (
-                            <span className="text-xs text-gray-500">canción #{row.song_id}</span>
-                          )}
-                        </div>
-                        <input
-                          className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white"
-                          value={row.label}
-                          onChange={(e) => patchRow(row.localId, { label: e.target.value })}
-                        />
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0 self-end sm:self-center">
-                        <button
-                          type="button"
-                          className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs"
-                          title="Subir"
-                          onClick={() => moveRow(index, -1)}
-                          disabled={index === 0}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs"
-                          title="Bajar"
-                          onClick={() => moveRow(index, 1)}
-                          disabled={index === rows.length - 1}
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          className="px-2 py-1 bg-red-900/60 hover:bg-red-800 rounded text-xs"
-                          onClick={() => removeRow(row.localId)}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                    ))}
+                  </ul>
+                </SortableContext>
+              </DndContext>
 
               {rows.length === 0 && <p className="text-gray-500 text-sm text-center py-4">Sin ítems.</p>}
 
